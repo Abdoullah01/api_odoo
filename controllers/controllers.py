@@ -102,6 +102,8 @@ class AccessToken(http.Controller):
                     'name': product.name,
                     'list_price': product.list_price,
                     'description_sale': product.description_sale,
+                    "category": [c.name for c in product.public_categ_ids],
+                    "sub_category": [c.name for c in  product.public_categ_ids.child_id],
                     'image_1920': product.image_1920.decode('utf-8'),
 
 
@@ -129,6 +131,8 @@ class AccessToken(http.Controller):
                     'name': p.name,
                     'list_price': p.list_price,
                     'description_sale': p.description_sale,
+                    "category": [c.name for c in p.public_categ_ids],
+                    "sub_category": [c.name for c in  p.public_categ_ids.child_id],
                     'image_1920': p.image_1920.decode('utf-8')
 
                 }
@@ -143,23 +147,26 @@ class AccessToken(http.Controller):
             ),
         )
 
-    @http.route('/api/get_all_category', type='http', methods=['GET'], auth="none", csrf=False)
+    @http.route('/api/categories', type='http', methods=['GET'], auth="none", csrf=False)
     def category(self):
         category = request.env['product.public.category'].sudo().search([])
         categories = []
         for c in category:
-            vals = {
-                "id": c.id,
-                "name": c.name,
-                "image_1920": c.image_1920.decode('utf-8') if c.image_1920 else False,
-                "parent_id": [{'id': p.id, 'name': p.name} for p in c.parent_id],
-                "child_id": [{'id': p.id, 'name': p.name} for p in c.child_id],
-                "parent_path": c.parent_path,
-                "display_name": c.display_name,
-                "product_tmpl_ids": [i.name for i in c.product_tmpl_ids],
-                "parents_and_self": [i.id for i in c.parents_and_self]
-            }
-            categories.append(vals)
+            if c.name in ('HOMME', 'FEMME', 'BÉBÉ', 'GARÇON', 'FILLE'):
+                print("c ===", c)
+                vals = {
+                    "id": c.id,
+                    "name": c.name,
+                    "sub_category": [p.name for p in c.child_id],
+                    "image_1920": c.image_1920.decode('utf-8') if c.image_1920 else False,
+                    # "parent_id": [{'id': p.id, 'name': p.name} for p in c.parent_id],
+
+                    # "parent_path": c.parent_path,
+                    # "display_name": c.display_name,
+                    # "product_tmpl_ids": [i.name for i in c.product_tmpl_ids],
+                    # "parents_and_self": [i.id for i in c.parents_and_self]
+                }
+                categories.append(vals)
         return werkzeug.wrappers.Response(
             status=200,
             content_type="application/json; charset=utf-8",
@@ -169,50 +176,81 @@ class AccessToken(http.Controller):
             ),
         )
 
-    @http.route('/api/get_product_category/<int:category_id>', type='http', methods=['GET'], auth="none", csrf=False)
-    def get_product_category(self, category_id=None):
-        category = request.env['product.public.category'].sudo()
-        query = '''
-                select * from product_public_category_product_template_rel where product_public_category_id in %(ids)s'''
-        cr = request._cr
-        cr.execute(query, {"ids": tuple(category.search([("id", "=", category_id)]).child_id.ids)})
-        data = cr.dictfetchall()
-        print('data', data)
-        prod = []
-        all_data = []
-        for ln in data:
+    @http.route('/api/categories/<int:category_id>', type='http', methods=['GET'], auth="none", csrf=False)
+    def get_by_product_category(self, category_id=None):
+
+        # query = '''
+        #         select * from product_public_category_product_template_rel where product_public_category_id in %(ids)s'''
+        # cr = request._cr
+        # cr.execute(query, {"ids": tuple(category.search([("id", "=", category_id)]).child_id.ids)})
+        # data = cr.dictfetchall()
+        # print('data', data)
+        # prod = []
+        # all_data = []
+        # for ln in data:
+        #     vals = {
+        #         "categ_id": ln.get("product_public_category_id"),
+        #         "categ_name": category.search([("id", "=", ln.get("product_public_category_id"))]).name,
+        #         "parent_id": category_id,
+        #     }
+        #
+        #     products = request.env['product.product'].sudo().search([
+        #         ('product_tmpl_id', '=', ln.get("product_template_id"))])
+        #     for p in products:
+        #         if p.image_1920:
+        #             val = {
+        #                 'id': p.id,
+        #                 'name': p.name,
+        #                 'list_price': p.list_price,
+        #                 'description_sale': p.description_sale,
+        #                 'image_1920': p.image_1920.decode('utf-8')
+        #
+        #             }
+        #         prod.append(val)
+        #         print("prod   :", prod)
+        #     vals.update(
+        #         {"product": prod}
+        #     )
+        #     all_data.append(vals)
+        #     print("prod   :", all_data)
+        category = request.env['product.public.category'].sudo().search([('id', 'child_of', category_id)])
+        #product_obj = request.env['product.product'].sudo().search([('public_categ_ids', '=', category_id)])
+        product_category = []
+        for cat in category:
             vals = {
-                "categ_id": ln.get("product_public_category_id"),
-                "categ_name": category.search([("id", "=", ln.get("product_public_category_id"))]).name,
-                "parent_id": category_id,
+                "id": cat.id,
+                "name": cat.name,
+                "product": [{
+                    "id": p.name,
+                    "name": p.name,
+                    'list_price': p.list_price,
+                    'description_sale': p.description_sale,
+                    "category": [c.name for c in p.public_categ_ids],
+                    "sub_category": [c.name for c in p.public_categ_ids.child_id],
+                    'image_1920': p.image_1920.decode('utf-8')
+                } for p in cat.product_tmpl_ids]
             }
+            product_category.append(vals)
 
-            products = request.env['product.product'].sudo().search([
-                ('product_tmpl_id', '=', ln.get("product_template_id"))])
-            for p in products:
-                if p.image_1920:
-                    val = {
-                        'id': p.id,
-                        'name': p.name,
-                        'list_price': p.list_price,
-                        'description_sale': p.description_sale,
-                        'image_1920': p.image_1920.decode('utf-8')
 
-                    }
-                prod.append(val)
-                print("prod   :", prod)
-            vals.update(
-                {"product": prod}
-            )
-            all_data.append(vals)
-            print("prod   :", all_data)
+        # for product in product_obj:
+        #     if product.image_1920:
+        #         vals = {
+        #             'id': product.id,
+        #             'name': product.name,
+        #             'list_price': product.list_price,
+        #             'description_sale': product.description_sale,
+        #             'image_1920': product.image_1920.decode('utf-8'),
+        #
+        #         }
+        #         product_category.append(vals)
 
         return werkzeug.wrappers.Response(
             status=200,
             content_type="application/json; charset=utf-8",
             headers=[("Cache-Control", "no-store"), ("Pragma", "no-cache")],
             response=json.dumps(
-                all_data
+                product_category
             ),
         )
 
@@ -234,9 +272,12 @@ class AccessToken(http.Controller):
         for product in product_obj:
             image_url_1920 = base_url + '/web/image/product.product/' + str(product.id) + '/image_1920'
             if product.image_1920:
+                print("product.public_categ_ids   ", len(product.public_categ_ids.child_id))
                 vals = {
                     'id': product.id,
                     'name': product.name,
+                    "public_categ_ids": [p.name for p in product.public_categ_ids],
+                    "public_categ_id": [p.name for p in product.public_categ_ids.child_id],
                     'color': product.color,
                     'categ_id': product.categ_id,
                     # 'product_variant_ids': {
