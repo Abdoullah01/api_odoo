@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-
-
 from odoo import http, exceptions
 from odoo.http import request
 import werkzeug.wrappers
@@ -15,16 +13,22 @@ import werkzeug
 from odoo import http, tools, _
 from odoo.addons.auth_signup.models.res_users import SignupError
 from odoo.addons.web.controllers.main import ensure_db, Home, SIGN_UP_REQUEST_PARAMS
-import xmlrpc.client
+# from server.odoo.addons.auth_signup.controllers.main import AuthSignupHome
 
 _logger = logging.getLogger(__name__)
 
 
-class AuthSignupHome(Home):
-    @http.route('/web/signup', type='http', auth='public', csrf=False)
-    def web_auth_signup(self, *args, **kw):
-        res = super(AuthSignupHome, self).web_auth_signup(*args, **kw)
-        return res
+# class AuthSignupHome(Home):
+#     @http.route('/web/signup', type='http', auth='public', csrf=False)
+#     def web_auth_signup(self, *args, **kw):
+#         print("Okkkkkkk")
+#         res = super(AuthSignupHome, self).web_auth_signup(*args, **kw)
+#         return res
+# class CreateUser(AuthSignupHome):
+#     @http.route('/web/signup', type='http', auth='public', website=True, sitemap=False)
+#     def web_auth_signup(self, *args, **kw):
+#         print('bonjour')
+#         return "Hello"
 
 
 class AccessToken(http.Controller):
@@ -77,7 +81,8 @@ class AccessToken(http.Controller):
         data = {"status": 200, "response": sale_order.name, "message": "success"}
         return data
 
-    @http.route(['/api/products', '/api/products/page/<int:page>'], type='http', methods=['GET'], auth="none", csrf=False, website=True)
+    @http.route(['/api/products', '/api/products/page/<int:page>'], type='http', methods=['GET'], auth="none",
+                csrf=False, website=True)
     def get_product(self, page=0, ppg=False, **post):
         print("post    ", request.params)
         product_per_page = 10
@@ -103,9 +108,54 @@ class AccessToken(http.Controller):
                     'list_price': product.list_price,
                     'description_sale': product.description_sale,
                     "category": [c.name for c in product.public_categ_ids],
-                    "sub_category": [c.name for c in  product.public_categ_ids.child_id],
+                    "attribute_line_ids": [c.name for c in product.attribute_line_ids],
+                    "sub_category": [c.name for c in product.public_categ_ids.child_id],
                     'image_1920': product.image_1920.decode('utf-8'),
 
+                }
+            products_list.append(vals)
+            print("tailes     : ", len(products_list))
+        return werkzeug.wrappers.Response(
+            status=200,
+            content_type="application/json; charset=utf-8",
+            headers=[("Cache-Control", "no-store"), ("Pragma", "no-cache")],
+            response=json.dumps(
+                products_list
+            ),
+        )
+
+    @http.route('/api/products/popular', type='http', methods=['GET'], auth="none",
+                csrf=False, website=True)
+    def get_popular_product(self, page=0, ppg=False, **post):
+        print("post    ", request.params)
+        product_per_page = 10
+        if ppg:
+            try:
+                ppg = int(ppg)
+                post['ppg'] = ppg
+            except ValueError:
+                ppg = False
+        total = http.request.env['product.template'].sudo().search_count([])
+        print("total    ", total)
+        products = http.request.env['product.template'].sudo().search([])
+        base_url = request.env['ir.config_parameter'].sudo().get_param('web.base.url')
+        print(len(products))
+        pager = request.website.pager(url='/api/products', total=total, page=page, step=ppg, url_args=post)
+        print("pager  ", pager)
+        products = http.request.env['product.template'].sudo().search([], offset=pager['offset'], limit=ppg)
+        products_list = []
+        for product in products:
+            if product.image_1920:
+                image_url_1920 = base_url + '/web/image?' + 'model=product.product&id=' + str(
+                    product.id) + '&field=image_1920'
+                vals = {
+                    'id': product.id,
+                    'name': product.name,
+                    'list_price': product.list_price,
+                    'description_sale': product.description_sale,
+                    "category": [c.name for c in product.public_categ_ids],
+                    "sub_category": [c.name for c in product.public_categ_ids.child_id],
+                    'image_1920': image_url_1920,
 
                 }
             products_list.append(vals)
@@ -124,20 +174,22 @@ class AccessToken(http.Controller):
         # Récuperer les variants d'artcicle,
         products = http.request.env['product.product'].sudo().search([('product_tmpl_id', '=', product_id)])
         products_list = []
+        base_url = request.env['ir.config_parameter'].sudo().get_param('web.base.url')
         for p in products:
             if p.image_1920:
+                # image_url_1920 = base_url + f'/web/image/product.product/{p.id}/image_1920'
                 vals = {
                     'id': p.id,
                     'name': p.name,
                     'list_price': p.list_price,
                     'description_sale': p.description_sale,
                     "category": [c.name for c in p.public_categ_ids],
-                    "sub_category": [c.name for c in  p.public_categ_ids.child_id],
+                    "sub_category": [c.name for c in p.public_categ_ids.child_id],
                     'image_1920': p.image_1920.decode('utf-8')
 
+                    # 'image_1920': p.image_1920.decode('utf-8')
                 }
                 products_list.append(vals)
-                print("products_list    : ", len(products_list))
         return werkzeug.wrappers.Response(
             status=200,
             content_type="application/json; charset=utf-8",
@@ -214,7 +266,7 @@ class AccessToken(http.Controller):
         #     all_data.append(vals)
         #     print("prod   :", all_data)
         category = request.env['product.public.category'].sudo().search([('id', 'child_of', category_id)])
-        #product_obj = request.env['product.product'].sudo().search([('public_categ_ids', '=', category_id)])
+        # product_obj = request.env['product.product'].sudo().search([('public_categ_ids', '=', category_id)])
         product_category = []
         for cat in category:
             vals = {
@@ -231,7 +283,6 @@ class AccessToken(http.Controller):
                 } for p in cat.product_tmpl_ids]
             }
             product_category.append(vals)
-
 
         # for product in product_obj:
         #     if product.image_1920:
@@ -267,47 +318,51 @@ class AccessToken(http.Controller):
 
         #     print("attribute_line_ids2 : ", p.attribute_line_ids.value_ids)
         # print("product_obj              :", product_obj.product_tmpl_id.name)
-        base_url = request.env['ir.config_parameter'].sudo().get_param('web.base.url')
         products_list = []
         for product in product_obj:
-            image_url_1920 = base_url + '/web/image/product.product/' + str(product.id) + '/image_1920'
             if product.image_1920:
                 print("product.public_categ_ids   ", len(product.public_categ_ids.child_id))
                 vals = {
                     'id': product.id,
                     'name': product.name,
-                    "public_categ_ids": [p.name for p in product.public_categ_ids],
-                    "public_categ_id": [p.name for p in product.public_categ_ids.child_id],
-                    'color': product.color,
-                    'categ_id': product.categ_id,
+                    # "public_categ_ids": [p.name for p in product.public_categ_ids],
+                    # "public_categ_id": [p.name for p in product.public_categ_ids.child_id],
+                    # 'color': product.color,
+                    # 'categ_id': product.categ_id,
                     # 'product_variant_ids': {
                     #     'image_variant_1920': [p.image_variant_1920 for p in product.product_variant_ids if p.image_variant_1920],
                     #     'product_template_variant_value_ids': [p.name for p in product.product_variant_ids.product_template_variant_value_ids]
                     #                         },
-                    'is_product_variant': product.is_product_variant,
-                    "attribute_line_ids.attribute_id": [p.attribute_id.name for p in product.attribute_line_ids],
-                    'list_price': product.list_price,
-                    'description': product.description,
-                    'image_variant_1920': [p.image_variant_1920.decode('utf-8') for p in product.product_variant_ids if
-                                           p.is_product_variant and p.image_variant_1920],
-                    'image_1920': image_url_1920,
+                    # 'is_product_variant': product.is_product_variant,
+                    "attribute_line_ids": [{
+                        'id': p.id,
+                        'a': p.html_color,
+                        # 'attribute': [a.id for a in p.attribute_id],
+                        'value': p.name,
+                        # 'value': [av.name for av in p.product_template_value_ids]
+                    } for p in product.valid_product_template_attribute_line_ids.product_template_value_ids],
+                    # 'list_price': product.list_price,
+                    # 'description': product.description,
+                    # 'image_variant_1920': [p.image_variant_1920.decode('utf-8') for p in product.product_variant_ids if
+                    # p.is_product_variant and p.image_variant_1920],
+                    # 'image_1920': product.image_1920,
                 }
-                print("len   : ", len(vals['image_variant_1920']))
+
                 products_list.append(vals)
 
         data = {"status": 200, "response": products_list, "message": "success"}
         return data
- # 'product_variant_ids': [{
-                    #     'id': pv.id,
-                    #     'name': pv.name,
-                    #     'description_sale': pv.description_sale,
-                    #     'lst_price': pv.lst_price,
-                    #     'image_variant_1920': pv.image_1920.decode('utf-8')
-                    #     if pv.image_1920 else False
-                    #
-                    # } for pv in product.product_variant_ids],
-                    # 'attribute_line_ids': {
-                    #     'attribute_id': [p.attribute_id.name for p in product.attribute_line_ids],
-                    #     # 'value_ids': [p.value_ids for p in product.attribute_line_ids]
-                    # },
-                    # 'product_template_variant_value_ids': [p.id for p in product.product_template_variant_value_ids],
+# 'product_variant_ids': [{
+#     'id': pv.id,
+#     'name': pv.name,
+#     'description_sale': pv.description_sale,
+#     'lst_price': pv.lst_price,
+#     'image_variant_1920': pv.image_1920.decode('utf-8')
+#     if pv.image_1920 else False
+#
+# } for pv in product.product_variant_ids],
+# 'attribute_line_ids': {
+#     'attribute_id': [p.attribute_id.name for p in product.attribute_line_ids],
+#     # 'value_ids': [p.value_ids for p in product.attribute_line_ids]
+# },
+# 'product_template_variant_value_ids': [p.id for p in product.product_template_variant_value_ids],

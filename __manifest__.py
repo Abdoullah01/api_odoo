@@ -21,7 +21,7 @@
     'sequence': -190,
 
     # any module necessary for this one to work correctly
-    'depends': ['base', 'web', 'website_sale'],
+    'depends': ['base', 'web'],
 
     # always loaded
     'data': [
